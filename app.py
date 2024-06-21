@@ -10,6 +10,7 @@ from selenium.common.exceptions import NoSuchElementException
 from betfair_scraper import BetfairScraper
 from betfair_data import BetfairData
 from get_market_id import GetMarketId
+from market_subscriber import MarketSubscriber
 
 from py_clob_client.constants import POLYGON
 from py_clob_client.client import ClobClient
@@ -62,9 +63,16 @@ print("Done!")
 get_market_ids = GetMarketId(client, FIRST_SLUG, SECOND_SLUG, DRAW_SLUG)
 ids = get_market_ids.get_market_ids()
 
+
 markets = []
+token_ids = []
 for id in ids:
-    markets.append(client.get_market(id))
+    market = client.get_market(id)
+    markets.append(market)
+    token_ids.extend([token["token_id"] for token in market["tokens"]])
+print(token_ids)
+market_subscriber = MarketSubscriber(token_ids)
+market_subscriber.run()
 
 def theo(back, lay):
     return 1 / ((back + lay) / 2)
