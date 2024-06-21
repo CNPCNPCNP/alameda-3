@@ -60,10 +60,11 @@ class BetfairScraper():
         draw_lay = float(self.wd.find_element(By.XPATH, 
             '//*[@id="main-wrapper"]/div/div[2]/div/ui-view/div/div/div[1]/div[3]/div/div[1]/div/bf-main-market/bf-main-marketview/div/div[2]/bf-marketview-runners-list[2]/div/div/div/table/tbody/tr[3]/td[5]/ours-price-button/button/label[1]').text)
         
-        first_book = {first_name: (first_back, first_lay)}
-        second_book = {second_name: (second_back, second_lay)}
-        draw_book = {"Draw": (draw_back, draw_lay)}
-        return [first_book, second_book, draw_book]
+        data = {}
+        data[first_name] = (first_back, first_lay)
+        data[second_name] = (second_back, second_lay)
+        data["Draw"] = (draw_back, draw_lay)
+        return data
 
     def refresh(self) -> None:
         refresh_button = self.wd.find_element(By.CLASS_NAME, 'refresh-btn')
