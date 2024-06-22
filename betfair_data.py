@@ -1,3 +1,5 @@
-class BetfairData():
-    def __init__(self, data):
-        self.data = data
+from dataclasses import dataclass
+
+@dataclass
+class BetfairData:
+    data: dict
