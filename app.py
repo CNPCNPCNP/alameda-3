@@ -45,15 +45,21 @@ def start_betfair_thread(match_url, betfair_data, betfair_event):
 async def main(client, markets, creds, betfair_event, betfair_data):
     message_queue = asyncio.Queue()
     stop_event = asyncio.Event()
+    subscription_complete_event = asyncio.Event()
     
     subscriber = MarketSubscriber([market["condition_id"] for market in markets], 
                                   creds, 
                                   message_queue, 
-                                  stop_event)
-    trader = Trader(client, message_queue, markets, betfair_data, stop_event)
+                                  stop_event,
+                                  subscription_complete_event)
+    trader = Trader(client, 
+                    message_queue, 
+                    markets, 
+                    betfair_data, 
+                    stop_event)
 
     subscriber_task = asyncio.create_task(subscriber.run())
-    app_task = asyncio.create_task(trader.make_markets())
+    app_task = asyncio.create_task(trader.make_markets(subscription_complete_event))
     print("Tasks started")
 
     await asyncio.sleep(60)

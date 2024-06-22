@@ -3,13 +3,14 @@ import json
 import websockets
 
 class MarketSubscriber:
-    def __init__(self, markets, creds, message_queue, stop_event):
+    def __init__(self, markets, creds, message_queue, stop_event, subscription_complete_event):
         self.markets = markets
         self.creds = creds
         self.url = "wss://ws-subscriptions-clob.polymarket.com/ws/user"
         self.message_queue = message_queue
         self.subscribe_message = self.create_subscription_message()
         self.stop_event = stop_event
+        self.subscription_complete_event = subscription_complete_event
 
     def create_subscription_message(self):
         auth = {
@@ -34,6 +35,7 @@ class MarketSubscriber:
     async def subscribe(self, websocket):
         await websocket.send(json.dumps(self.subscribe_message))
         print(f"Subscribed with message: {self.subscribe_message}")
+        self.subscription_complete_event.set()
 
     async def listen(self, websocket):
         while not self.stop_event.is_set():

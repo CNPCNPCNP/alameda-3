@@ -1,4 +1,5 @@
 import asyncio
+from functools import partial
 import math
 
 from open_orders import OpenOrders
@@ -23,69 +24,93 @@ class Trader():
         self.markets = markets
         self.betfair_data = betfair_data
         self.stop_event = stop_event
+        
+        self.orders = []
+        self.positions = []
+        for market in markets:
+            market_id = market["condition_id"]
+            neg_risk = market["neg_risk"]
+            token_ids = [token["token_id"] for token in market["tokens"]]
+            order = OpenOrders(market_id, token_ids[0], token_ids[1], neg_risk)
+            position = Position(market_id, token_ids[0], token_ids[1], neg_risk)
+            self.orders.append(order)
+            self.positions.append(position)
 
-        first_orders = OpenOrders()
-        second_orders = OpenOrders()
-        draw_orders = OpenOrders()
-
-        first_position = Position()
-        second_position = Position()
-        draw_position = Position()
-
-        self.orders = [first_orders, second_orders, draw_orders]
-        self.positions = [first_position, second_position, draw_position]
-
-    async def make_markets(self):
+    async def make_markets(self, subscription_complete_event):
+        await subscription_complete_event.wait()
         while not self.stop_event.is_set():
             try:
                 message = self.message_queue.get_nowait()
-                print(f"Processing message: {message}")
-                print(type(message))
+                if message["type"] == "PLACEMENT":
+                    market_id = message["market"]
+                    filled = int(message["size_matched"])
+                    newly_open = int(message["original_size"]) - filled
+                    token_id = message["asset_id"]
+                    for order in self.orders:
+                        if order.market_id == market_id:
+                            if order.yes_token == token_id:
+                                order.yes_confirmed_vol += newly_open
+                                order.yes_sent_vol -= newly_open
+                            if order.no_token == token_id:
+                                order.no_confirmed_vol += newly_open
+                                order.no_sent_vol -= newly_open
+                await self.check_current_orders()
             except asyncio.QueueEmpty:
                 # No message received, do other stuff without blocking
-                self.check_current_orders()
+                await self.check_current_orders()
                 await asyncio.sleep(0.5)
         print("Exiting all trades!")
         self.exit_market()
 
-    def check_current_orders(self):
+    async def check_current_orders(self):
         if not self.betfair_data.data:
             print("Waiting for betfair data")
             return
-        for index, (open_orders, market) in enumerate(zip(self.orders, self.markets)):
+        for index, open_orders in enumerate(self.orders):
             back, lay = self.betfair_data.data[TEAMS[index]]
             theoval = theo(back, lay)
             if theoval < 0.03 or theoval > 0.97:
                 print("Theoval too skewed, not trading")
                 return
-            
-            token_ids = [token["token_id"] for token in market["tokens"]]
-            neg_risk = market["neg_risk"]
-
+    
             if open_orders.yes_sent_vol + open_orders.yes_confirmed_vol <= 0:
                 open_orders.yes_price = math.floor(100*theoval - DEFAULT_WIDTH) / 100
-                print(f"Buying Yes for {TEAMS[index]}, {theoval}, @ {open_orders.yes_price}")
-                resp = self.client.create_and_post_order(OrderArgs(
-                    price = open_orders.yes_price,
-                    size = max(5, DEFAULT_SIZE // open_orders.yes_price),
-                    side = BUY,
-                    token_id=token_ids[0]
-                ),
-                PartialCreateOrderOptions(neg_risk=neg_risk))
-                print(resp)
                 open_orders.yes_sent_vol += DEFAULT_SIZE
+                print(f"Buying Yes for {TEAMS[index]}, {theoval}, @ {open_orders.yes_price}")
+                
+                resp = await self.create_and_post_order_async(open_orders.yes_price,
+                                                              DEFAULT_SIZE,
+                                                              BUY,
+                                                              open_orders.yes_token,
+                                                              open_orders.neg_risk)
+                print(resp)
             if open_orders.no_sent_vol + open_orders.no_confirmed_vol <= 0:
                 open_orders.no_price = math.ceil((100*(1-theoval)) - DEFAULT_WIDTH) / 100
-                print(f"Buying No for {TEAMS[index]}, {theoval}, @ {open_orders.no_price}")
-                resp = self.client.create_and_post_order(OrderArgs(
-                    price = open_orders.no_price,
-                    size = max(5, DEFAULT_SIZE // open_orders.no_price),
-                    side = BUY,
-                    token_id=token_ids[1]
-                ),
-                PartialCreateOrderOptions(neg_risk=neg_risk))
-                print(resp)
                 open_orders.no_sent_vol += DEFAULT_SIZE
+                print(f"Buying No for {TEAMS[index]}, {theoval}, @ {open_orders.no_price}")
+
+                resp = await self.create_and_post_order_async(open_orders.no_price,
+                                                              DEFAULT_SIZE,
+                                                              BUY,
+                                                              open_orders.no_token,
+                                                              open_orders.neg_risk)
+                print(resp)
+
+    async def create_and_post_order_async(self, price, size, side, token_id, neg_risk):
+        loop = asyncio.get_running_loop()
+
+        func = partial(
+            self.client.create_and_post_order,
+            OrderArgs(
+                price=price,
+                size=size,
+                side=side,
+                token_id=token_id
+            ),
+            PartialCreateOrderOptions(neg_risk=neg_risk)
+        )
+        response = await loop.run_in_executor(None, func)
+        return response
             
     def exit_market(self):
         for market in self.markets:

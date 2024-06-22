@@ -2,6 +2,10 @@ from dataclasses import dataclass
 
 @dataclass
 class OpenOrders:
+    market_id: str
+    yes_token: str
+    no_token: str
+    neg_risk: bool
     yes_price: float = 0.
     no_price: float = 0.
     yes_sent_vol: int = 0
