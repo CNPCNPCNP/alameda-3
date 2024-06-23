@@ -2,7 +2,7 @@ import time
 import undetected_chromedriver as uc
 
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException
 
 class BetfairScraper():
 
@@ -36,6 +36,10 @@ class BetfairScraper():
             login.click_safe()
             time.sleep(5)
         except NoSuchElementException:
+            print("Failed login to betfair, retrying")
+            self.wd.refresh()
+            self.login(url, username, password)
+        except ElementClickInterceptedException:
             print("Failed login to betfair, retrying")
             self.wd.refresh()
             self.login(url, username, password)

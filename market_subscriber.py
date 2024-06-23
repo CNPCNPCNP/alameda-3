@@ -46,10 +46,25 @@ class MarketSubscriber:
             except asyncio.TimeoutError:
                 continue
             except websockets.ConnectionClosed:
-                print("Connection closed")
-                break
-        print("exiting market subscriber")
+                print("Connection closed, will retry")
+                await self.handle_reconnect()
+                return
+        print("exiting market subscriber normally")
         await websocket.close()
+
+    async def handle_reconnect(self):
+        backoff_time = 1
+        while not self.stop_event.is_set():
+            print(f"Attempting to reconnect in {backoff_time} seconds...")
+            await asyncio.sleep(backoff_time)
+            backoff_time = min(backoff_time * 2, 60)  # Exponential backoff with a maximum of 60 seconds
+            try:
+                async with websockets.connect(self.url) as websocket:
+                    await self.subscribe(websocket)
+                    await self.listen(websocket)
+                    return
+            except Exception as e:
+                print(f"Reconnection failed: {e}")
 
     async def run(self):
         await self.connect()

@@ -19,10 +19,12 @@ from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import AssetType, BalanceAllowanceParams, BookParams, OrderArgs, PartialCreateOrderOptions
 from py_clob_client.order_builder.constants import BUY, SELL
 
-BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.229546023"
-FIRST_SLUG = "will-turkey-win-june-22"
-SECOND_SLUG = "will-portugal-win-june-22"
-DRAW_SLUG = "will-the-match-be-a-draw-Turkey-portugal"
+BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.229454370"
+FIRST_SLUG = "will-switzerland-win"
+SECOND_SLUG = "will-germany-win-june-23"
+DRAW_SLUG = "will-the-match-be-a-draw-switzerland-germany"
+TEAMS = ["Switzerland", "Germany", "Draw"]
+RUNTIME = 300
 
 host = "https://clob.polymarket.com"
 key = os.getenv("PK")
@@ -40,7 +42,12 @@ def start_betfair_thread(match_url, betfair_data, betfair_event):
         time.sleep(0.5)
     scraper.close()
     time.sleep(1)
-    return
+    return 
+
+def handle_exception(loop, context):
+    # context["message"] will always be there; but context["exception"] may not
+    msg = context.get("exception", context["message"])
+    print(f"Caught exception: {msg}")
 
 async def main(client, markets, creds, betfair_event, betfair_data):
     message_queue = asyncio.Queue()
@@ -56,13 +63,17 @@ async def main(client, markets, creds, betfair_event, betfair_data):
                     message_queue, 
                     markets, 
                     betfair_data, 
-                    stop_event)
+                    stop_event,
+                    TEAMS)
 
     subscriber_task = asyncio.create_task(subscriber.run())
     app_task = asyncio.create_task(trader.make_markets(subscription_complete_event))
     print("Tasks started")
 
-    await asyncio.sleep(60)
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(handle_exception)
+
+    await asyncio.sleep(RUNTIME)
     print("Timer expired. Disconnecting...")
     subscriber.stop_event.set()
     trader.stop_event.set()
@@ -70,7 +81,6 @@ async def main(client, markets, creds, betfair_event, betfair_data):
     
     await subscriber_task
     await app_task
-    
 
 if __name__ == "__main__":
     client = ClobClient(host, key=key, chain_id=chain_id)
