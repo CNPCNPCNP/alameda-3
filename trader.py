@@ -78,25 +78,27 @@ class Trader():
                 if market_detail.yes_token == token_id:
                     if order_id in market_detail.yes_sent_orders:
                         del market_detail.yes_sent_orders[order_id]
-                    print(self.yes_sent_orders)
+                    print(market_detail.yes_sent_orders)
                 if market_detail.no_token == token_id:
                     if order_id in market_detail.no_sent_orders:
                         del market_detail.no_sent_orders[order_id]
-                    print(self.no_sent_orders)
+                    print(market_detail.no_sent_orders)
 
     def handle_trade_message(self, message):
         market_id = message["market"]
-        token_id = message["asset_id"]
         maker_orders = message["maker_orders"][0]
         side = message["trader_side"]
         if message["status"] != "MATCHED":
             return
+        print(message)
         
         if side == MAKER:
+            token_id = maker_orders["asset_id"]
             filled = float(maker_orders["matched_amount"])
             price = float(maker_orders["price"])
             order_id = maker_orders["order_id"]
         if side == TAKER:
+            token_id = message["asset_id"]
             filled = float(message["size"])
             price = float(message["price"])
             order_id = message["taker_order_id"]	
@@ -119,8 +121,6 @@ class Trader():
                         print("Order fully filled, removing")
                         del market_detail.no_sent_orders[order_id]
                 print(f"New position: {market_detail.yes_position}, {market_detail.no_position}")
-
-        print(message)
         
     async def check_current_orders(self):
         if not self.betfair_data.data:
@@ -200,22 +200,23 @@ class Trader():
                     print(orders)
 
     async def send_buy_order(self, market, price, size, side, token, neg_risk, theoval):
-                resp = await self.create_and_post_order_async(price,
-                                                              size,
-                                                              BUY,
-                                                              token,
-                                                              neg_risk)
-                print(resp)
-                order = Order(resp["orderID"], 
-                              token,
-                              side, 
-                              DEFAULT_SIZE, 
-                              price, 
-                              theoval)
-                if side == YES:
-                    market.yes_sent_orders[resp["orderID"]] = order
-                else:
-                    market.no_sent_orders[resp["orderID"]] = order
+        resp = await self.create_and_post_order_async(price,
+                                                      size,
+                                                      BUY,
+                                                      token,
+                                                      neg_risk)
+        print(resp)
+        
+        order = Order(resp["orderID"], 
+                        token,
+                        side, 
+                        DEFAULT_SIZE, 
+                        price, 
+                        theoval)
+        if side == YES:
+            market.yes_sent_orders[resp["orderID"]] = order
+        else:
+            market.no_sent_orders[resp["orderID"]] = order
 
     async def create_and_post_order_async(self, price, size, side, token_id, neg_risk):
         loop = asyncio.get_running_loop()
