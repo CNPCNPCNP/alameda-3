@@ -178,12 +178,12 @@ class Trader():
         if side == YES:
             sent_orders = market_detail.yes_sent_orders
             token = market_detail.yes_token
-            if market_detail.yes_position > market_detail.no_position + DEFAULT_SIZE * 2 - EPSILON:
+            if market_detail.yes_position > market_detail.no_position + DEFAULT_SIZE * 2 - EPSILON and price == market_detail.yes_price:
                 return False
         else:
             sent_orders = market_detail.no_sent_orders
             token = market_detail.no_token
-            if market_detail.no_position > market_detail.yes_position + DEFAULT_SIZE * 2 - EPSILON:
+            if market_detail.no_position > market_detail.yes_position + DEFAULT_SIZE * 2 - EPSILON and price == market_detail.no_price:
                 return False
 
         for order_id in sent_orders:
