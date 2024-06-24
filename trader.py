@@ -129,7 +129,7 @@ class Trader():
         for index, market_detail in enumerate(self.market_details):
             back, lay = self.betfair_data.data[self.teams[index]]
             theoval = theo(back, lay)
-            if theoval < 0.03 or theoval > 0.97:
+            if theoval < 0.04 or theoval > 0.96:
                 print("Theoval too skewed, not trading")
                 return
 
@@ -143,45 +143,45 @@ class Trader():
                 no_price -= 0.01
             
             market_detail.theoval = theoval
+            market_detail.yes_price = yes_price
+            market_detail.no_price = no_price
 
-            if self.check_if_new_order_needed(market_detail, yes_price, YES):
-                market_detail.yes_price = yes_price
-                print(f"Buying Yes for {self.teams[index]}, {theoval}, @ {yes_price}")
-                await self.send_buy_order(market_detail,
-                                    yes_price,
-                                    DEFAULT_SIZE,
-                                    YES,
-                                    market_detail.yes_token,
-                                    market_detail.neg_risk,
-                                    theoval)
-            if self.check_if_new_order_needed(market_detail, no_price, NO):
-                market_detail.no_price = no_price
-                print(f"Buying No for {self.teams[index]}, {theoval}, @ {no_price}")
-                await self.send_buy_order(market_detail,
-                                    no_price,
-                                    DEFAULT_SIZE,
-                                    NO,
-                                    market_detail.no_token,
-                                    market_detail.neg_risk,
-                                    theoval)
-            
             self.remove_bad_orders(market_detail, yes_price, no_price)
 
-    def check_if_new_order_needed(self, market_detail, price, side):
+            await self.check_and_send_if_new_order_needed(market_detail, yes_price, YES)
+            await self.check_and_send_if_new_order_needed(market_detail, no_price, NO)
+            await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.01, YES)
+            await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.01, NO)
+            await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.02, YES)
+            await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.02, NO)
+
+            
+
+    async def check_and_send_if_new_order_needed(self, market_detail, price, side):
         if side == YES:
             sent_orders = market_detail.yes_sent_orders
+            token = market_detail.yes_token
             if market_detail.yes_position > market_detail.no_position + 10:
                 return False
         else:
             sent_orders = market_detail.no_sent_orders
+            token = market_detail.no_token
             if market_detail.no_position > market_detail.yes_position + 10:
                 return False
 
         for order_id in sent_orders:
             order = sent_orders[order_id]
-            if order.price >= price:
+            if order.price == price:
                 return False
-        return True
+        
+        print(f"Buying {side} for {market_detail.market_name}, {market_detail.theoval}, @ {price}")
+        await self.send_buy_order(market_detail,
+                                    price,
+                                    DEFAULT_SIZE,
+                                    side,
+                                    token,
+                                    market_detail.neg_risk,
+                                    market_detail.theoval)
                 
     def remove_bad_orders(self, market, yes_price, no_price):
         self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price)
