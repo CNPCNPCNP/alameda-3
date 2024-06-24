@@ -63,13 +63,10 @@ class Trader():
         for market_detail in self.market_details:
             if market_detail.market_id == market_id:
                 if market_detail.yes_token == token_id:
-                    order = market_detail.yes_sent_orders[order_id]
-                    market_detail.yes_confirmed_orders[order_id] = order
-                    del market_detail.yes_sent_orders[order_id]
+                    print(f"Order {order_id} successfully placed in {market_detail.market_name} on YES")
                 if market_detail.no_token == token_id:
-                    order = market_detail.no_sent_orders[order_id]
-                    market_detail.no_confirmed_orders[order_id] = order
-                    del market_detail.no_sent_orders[order_id]
+                    print(f"Order {order_id} successfully placed in {market_detail.market_name} on NO")
+
 
     def handle_cancel_message(self, message):
         market_id = message["market"]
@@ -79,20 +76,13 @@ class Trader():
         for market_detail in self.market_details:
             if market_detail.market_id == market_id:
                 if market_detail.yes_token == token_id:
-                    if order_id in market_detail.yes_confirmed_orders:
-                        del market_detail.yes_confirmed_orders[order_id]
                     if order_id in market_detail.yes_sent_orders:
-                        del market_detail.yes_confirmed_orders[order_id]
+                        del market_detail.yes_sent_orders[order_id]
                     print(self.yes_sent_orders)
-                    print(self.yes_confirmed_orders)
                 if market_detail.no_token == token_id:
-                    if order_id in market_detail.no_confirmed_orders:
-                        del market_detail.no_confirmed_orders[order_id]
                     if order_id in market_detail.no_sent_orders:
-                        del market_detail.no_confirmed_orders[order_id]
+                        del market_detail.no_sent_orders[order_id]
                     print(self.no_sent_orders)
-                    print(self.no_confirmed_orders)
-        print(f"Cancel {message}")
 
     def handle_trade_message(self, message):
         market_id = message["market"]
@@ -113,39 +103,21 @@ class Trader():
         for market_detail in self.market_details:
             if market_detail.market_id == market_id:
                 if market_detail.yes_token == token_id:
-                    if order_id in market_detail.yes_sent_orders:
-                        order = market_detail.yes_sent_orders[order_id]
-                    else:
-                        order = market_detail.yes_confirmed_orders[order_id]
+                    order = market_detail.yes_sent_orders[order_id]
                     market_detail.yes_position += filled
                     print(f"Traded Yes @ {price} for {filled} in {market_detail.market_name}. Theoval {market_detail.theoval}")
                     order.size -= filled
                     if order.size <= 0:
                         print("Order fully filled, removing")
-                        if order_id in market_detail.yes_sent_orders:
-                            del market_detail.yes_sent_orders[order_id]
-                        elif order_id in market_detail.yes_confirmed_orders:
-                            del market_detail.yes_confirmed_orders[order_id]
-                        else:
-                            "shouldn't be here, something went wrong"
+                        del market_detail.yes_sent_orders[order_id]                      
                 if market_detail.no_token == token_id:
-                    if order_id in market_detail.no_sent_orders:
-                        order = market_detail.no_sent_orders[order_id]
-                    else:
-                        order = market_detail.no_confirmed_orders[order_id]
                     order = market_detail.no_sent_orders[order_id]
                     market_detail.no_position += filled
                     print(f"Traded No @ {price} for {filled} in {market_detail.market_name}. Theoval {market_detail.theoval}")
-
                     order.size -= filled
                     if order.size <= 0:
                         print("Order fully filled, removing")
-                        if order_id in market_detail.no_sent_orders:
-                            del market_detail.no_sent_orders[order_id]
-                        elif order_id in market_detail.no_confirmed_orders:
-                            del market_detail.no_confirmed_orders[order_id]
-                        else:
-                            "shouldn't be here, something went wrong"
+                        del market_detail.no_sent_orders[order_id]
                 print(f"New position: {market_detail.yes_position}, {market_detail.no_position}")
 
         print(message)
@@ -172,10 +144,7 @@ class Trader():
             
             market_detail.theoval = theoval
 
-            if (self.check_if_new_order_needed(market_detail.yes_sent_orders, 
-                                               market_detail.yes_confirmed_orders,
-                                               yes_price) and
-                market_detail.yes_position < market_detail.no_position + 10):
+            if self.check_if_new_order_needed(market_detail, yes_price, YES):
                 market_detail.yes_price = yes_price
                 print(f"Buying Yes for {self.teams[index]}, {theoval}, @ {yes_price}")
                 await self.send_buy_order(market_detail,
@@ -185,10 +154,7 @@ class Trader():
                                     market_detail.yes_token,
                                     market_detail.neg_risk,
                                     theoval)
-            if (self.check_if_new_order_needed(market_detail.no_sent_orders, 
-                                               market_detail.no_confirmed_orders,
-                                               no_price) and
-                market_detail.no_position < market_detail.yes_position + 10):
+            if self.check_if_new_order_needed(market_detail, no_price, NO):
                 market_detail.no_price = no_price
                 print(f"Buying No for {self.teams[index]}, {theoval}, @ {no_price}")
                 await self.send_buy_order(market_detail,
@@ -201,29 +167,32 @@ class Trader():
             
             self.remove_bad_orders(market_detail, yes_price, no_price)
 
-    def check_if_new_order_needed(self, sent_orders, confirmed_orders, price):
+    def check_if_new_order_needed(self, market_detail, price, side):
+        if side == YES:
+            sent_orders = market_detail.yes_sent_orders
+            if market_detail.yes_position > market_detail.no_position + 10:
+                return False
+        else:
+            sent_orders = market_detail.no_sent_orders
+            if market_detail.no_position > market_detail.yes_position + 10:
+                return False
+
         for order_id in sent_orders:
             order = sent_orders[order_id]
-            if order.price >= price:
-                return False
-        for order_id in confirmed_orders:
-            order = confirmed_orders[order_id]
             if order.price >= price:
                 return False
         return True
                 
     def remove_bad_orders(self, market, yes_price, no_price):
-        self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price, YES)
-        self.remove_bad_orders_helper(market, market.yes_confirmed_orders, yes_price, YES)
-        self.remove_bad_orders_helper(market, market.no_sent_orders, no_price, NO)
-        self.remove_bad_orders_helper(market, market.no_confirmed_orders, no_price, NO)
+        self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price)
+        self.remove_bad_orders_helper(market, market.no_sent_orders, no_price)
 
-    def remove_bad_orders_helper(self, market, orders, cancellation_price, side):
+    def remove_bad_orders_helper(self, market, orders, cancellation_price):
         for order_id in orders:
             order = orders[order_id]
             if order.price > cancellation_price:
                 print(
-                    f"Should remove bad orders from {side} above {cancellation_price} in market {market.market_name}, theoval {market.theoval}")
+                    f"Should remove bad orders from YES above {cancellation_price} in market {market.market_name}, theoval {market.theoval}")
                 resp = self.client.cancel(order_id)
                 if resp["not_canceled"]:
                     print("Order already cancelled")

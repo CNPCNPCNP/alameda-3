@@ -11,8 +11,6 @@ class MarketDetails:
     no_price: float = 0.
     yes_sent_orders: dict = field(default_factory=dict)
     no_sent_orders: dict = field(default_factory=dict)
-    yes_confirmed_orders: dict = field(default_factory=dict)
-    no_confirmed_orders: dict = field(default_factory=dict)
     yes_position: float = 0
     no_position: float = 0
     theoval: float = 0

@@ -19,12 +19,12 @@ from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import AssetType, BalanceAllowanceParams, BookParams, OrderArgs, PartialCreateOrderOptions
 from py_clob_client.order_builder.constants import BUY, SELL
 
-BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.229454370"
-FIRST_SLUG = "will-switzerland-win"
-SECOND_SLUG = "will-germany-win-june-23"
-DRAW_SLUG = "will-the-match-be-a-draw-switzerland-germany"
-TEAMS = ["Switzerland", "Germany", "Draw"]
-RUNTIME = 300
+BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.229545435"
+FIRST_SLUG = "will-croatia-win-june-24"
+SECOND_SLUG = "will-italy-win"
+DRAW_SLUG = "will-the-match-be-a-draw-croatia-italy"
+TEAMS = ["Croatia", "Italy", "Draw"]
+RUNTIME = 3000
 
 host = "https://clob.polymarket.com"
 key = os.getenv("PK")
@@ -44,10 +44,10 @@ def start_betfair_thread(match_url, betfair_data, betfair_event):
     time.sleep(1)
     return 
 
-def handle_exception(loop, context):
-    # context["message"] will always be there; but context["exception"] may not
-    msg = context.get("exception", context["message"])
-    print(f"Caught exception: {msg}")
+async def shutdown_after_delay(delay, stop_event):
+    await asyncio.sleep(delay)
+    print("Timer expired. Initiating shutdown...")
+    stop_event.set()
 
 async def main(client, markets, creds, betfair_event, betfair_data):
     message_queue = asyncio.Queue()
@@ -67,20 +67,13 @@ async def main(client, markets, creds, betfair_event, betfair_data):
                     TEAMS)
 
     subscriber_task = asyncio.create_task(subscriber.run())
-    app_task = asyncio.create_task(trader.make_markets(subscription_complete_event))
+    shutdown_task = asyncio.create_task(shutdown_after_delay(RUNTIME, stop_event))
     print("Tasks started")
 
-    loop = asyncio.get_running_loop()
-    loop.set_exception_handler(handle_exception)
-
-    await asyncio.sleep(RUNTIME)
-    print("Timer expired. Disconnecting...")
-    subscriber.stop_event.set()
-    trader.stop_event.set()
+    await trader.make_markets(subscription_complete_event)
     betfair_event.clear()
     
     await subscriber_task
-    await app_task
 
 if __name__ == "__main__":
     client = ClobClient(host, key=key, chain_id=chain_id)
