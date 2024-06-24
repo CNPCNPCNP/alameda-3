@@ -92,7 +92,6 @@ class Trader():
         side = message["trader_side"]
         if message["status"] != "MATCHED":
             return
-        print(message)
         
         if side == MAKER:
             for maker_order in maker_orders:
@@ -128,12 +127,25 @@ class Trader():
                     if order.size <= EPSILON:
                         print("Order fully filled, removing")
                         del market_detail.no_sent_orders[order_id]
-            print(f"New position: {market_detail.yes_position}, {market_detail.no_position}")
+                print(f"New position: {market_detail.yes_position}, {market_detail.no_position}")
+
+    def offset_positions(self):
+        offset_yes = min([market_detail.yes_position for market_detail in self.market_details])
+        offset_no = min([market_detail.no_position for market_detail in self.market_details])
+        if offset_yes > 0:
+            print(f"Offsetting {offset_yes} in YES")
+        if offset_no > 0:
+            print(f"Offsetting {offset_no} in NO")
+        for market_detail in self.market_details:
+            market_detail.yes_position -= offset_yes
+            market_detail.no_position -= offset_no
     
     async def check_current_orders(self):
         if not self.betfair_data.data:
             print("Waiting for betfair data")
             return
+        
+        self.offset_positions()
         for index, market_detail in enumerate(self.market_details):
             back, lay = self.betfair_data.data[self.teams[index]]
             theoval = theo(back, lay)
@@ -155,14 +167,13 @@ class Trader():
             market_detail.no_price = no_price
 
             self.remove_bad_orders(market_detail, yes_price, no_price)
-
             await self.check_and_send_if_new_order_needed(market_detail, yes_price, YES)
             await self.check_and_send_if_new_order_needed(market_detail, no_price, NO)
             await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.01, YES)
             await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.01, NO)
             await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.02, YES)
             await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.02, NO)
-
+        
     async def check_and_send_if_new_order_needed(self, market_detail, price, side):
         if side == YES:
             sent_orders = market_detail.yes_sent_orders
@@ -253,3 +264,5 @@ class Trader():
             for id in token_ids:
                 resp = self.client.cancel_market_orders(market=condition_id, asset_id=id)
                 print(resp)
+        for market_detail in self.market_details:
+            print(f"{market_detail.market_name} position: {market_detail.yes_position} - {market_detail.no_position}")
