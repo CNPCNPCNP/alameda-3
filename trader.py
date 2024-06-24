@@ -12,6 +12,7 @@ from py_clob_client.order_builder.constants import BUY, SELL
 
 DEFAULT_WIDTH = 1
 DEFAULT_SIZE = 5
+EPSILON = 0.01
 MAKER = "MAKER"
 TAKER= "TAKER"
 YES = "YES"
@@ -21,13 +22,14 @@ def theo(back, lay):
     return 1 / ((back + lay) / 2)
 
 class Trader():
-    def __init__(self, client, message_queue, markets, betfair_data, stop_event, teams):
+    def __init__(self, client, message_queue, markets, betfair_data, stop_event, teams, polymarket_address):
         self.client = client
         self.message_queue = message_queue
         self.markets = markets
         self.betfair_data = betfair_data
         self.teams = teams
         self.stop_event = stop_event
+        self.polymarket_address = polymarket_address
         
         self.market_details = []
         for index, market in enumerate(markets):
@@ -86,22 +88,28 @@ class Trader():
 
     def handle_trade_message(self, message):
         market_id = message["market"]
-        maker_orders = message["maker_orders"][0]
+        maker_orders = message["maker_orders"]
         side = message["trader_side"]
         if message["status"] != "MATCHED":
             return
         print(message)
         
         if side == MAKER:
-            token_id = maker_orders["asset_id"]
-            filled = float(maker_orders["matched_amount"])
-            price = float(maker_orders["price"])
-            order_id = maker_orders["order_id"]
+            for maker_order in maker_orders:
+                if maker_order["maker_address"] == self.polymarket_address:
+                    self.handle_trade_message_helper(market_id, 
+                                                    maker_order["asset_id"], 
+                                                    float(maker_order["matched_amount"]), 
+                                                    float(maker_order["price"]), 
+                                                    maker_order["order_id"])
         if side == TAKER:
-            token_id = message["asset_id"]
-            filled = float(message["size"])
-            price = float(message["price"])
-            order_id = message["taker_order_id"]	
+            self.handle_trade_message_helper(market_id,
+                                             message["asset_id"], 
+                                             filled = float(message["size"]), 
+                                             price = float(message["price"]), 
+                                             order_id = message["taker_order_id"])            
+            
+    def handle_trade_message_helper(self, market_id, token_id, filled, price, order_id):
         for market_detail in self.market_details:
             if market_detail.market_id == market_id:
                 if market_detail.yes_token == token_id:
@@ -109,7 +117,7 @@ class Trader():
                     market_detail.yes_position += filled
                     print(f"Traded Yes @ {price} for {filled} in {market_detail.market_name}. Theoval {market_detail.theoval}")
                     order.size -= filled
-                    if order.size <= 0:
+                    if order.size <= EPSILON:
                         print("Order fully filled, removing")
                         del market_detail.yes_sent_orders[order_id]                      
                 if market_detail.no_token == token_id:
@@ -117,11 +125,11 @@ class Trader():
                     market_detail.no_position += filled
                     print(f"Traded No @ {price} for {filled} in {market_detail.market_name}. Theoval {market_detail.theoval}")
                     order.size -= filled
-                    if order.size <= 0:
+                    if order.size <= EPSILON:
                         print("Order fully filled, removing")
                         del market_detail.no_sent_orders[order_id]
-                print(f"New position: {market_detail.yes_position}, {market_detail.no_position}")
-        
+            print(f"New position: {market_detail.yes_position}, {market_detail.no_position}")
+    
     async def check_current_orders(self):
         if not self.betfair_data.data:
             print("Waiting for betfair data")
@@ -135,10 +143,10 @@ class Trader():
 
             yes_price = math.floor(100*theoval - DEFAULT_WIDTH) / 100
             no_price = math.ceil((100*(1-theoval)) - DEFAULT_WIDTH) / 100
-            if market_detail.yes_position >= market_detail.no_position + 5:
+            if market_detail.yes_position >= market_detail.no_position + DEFAULT_SIZE - EPSILON:
                 yes_price -= 0.01
                 no_price += 0.01
-            if market_detail.yes_position + 5 <= market_detail.no_position:
+            if market_detail.no_position >= market_detail.yes_position + DEFAULT_SIZE - EPSILON:
                 yes_price += 0.01
                 no_price -= 0.01
             
@@ -155,18 +163,16 @@ class Trader():
             await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.02, YES)
             await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.02, NO)
 
-            
-
     async def check_and_send_if_new_order_needed(self, market_detail, price, side):
         if side == YES:
             sent_orders = market_detail.yes_sent_orders
             token = market_detail.yes_token
-            if market_detail.yes_position > market_detail.no_position + 10:
+            if market_detail.yes_position > market_detail.no_position + DEFAULT_SIZE * 2 - EPSILON:
                 return False
         else:
             sent_orders = market_detail.no_sent_orders
             token = market_detail.no_token
-            if market_detail.no_position > market_detail.yes_position + 10:
+            if market_detail.no_position > market_detail.yes_position + DEFAULT_SIZE * 2 - EPSILON:
                 return False
 
         for order_id in sent_orders:
@@ -184,13 +190,19 @@ class Trader():
                                     market_detail.theoval)
                 
     def remove_bad_orders(self, market, yes_price, no_price):
+        # Cap our absolute position hopefully
+        if market.yes_position > market.no_position + DEFAULT_SIZE * 4:
+            yes_price = 0
+        if market.no_position > market.yes_position + DEFAULT_SIZE * 4:
+            no_price = 0
+        
         self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price)
         self.remove_bad_orders_helper(market, market.no_sent_orders, no_price)
 
     def remove_bad_orders_helper(self, market, orders, cancellation_price):
-        for order_id in orders:
+        for order_id in list(orders.keys()):
             order = orders[order_id]
-            if order.price > cancellation_price:
+            if order.price > cancellation_price + EPSILON:
                 print(
                     f"Should remove bad orders from YES above {cancellation_price} in market {market.market_name}, theoval {market.theoval}")
                 resp = self.client.cancel(order_id)

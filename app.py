@@ -24,19 +24,19 @@ FIRST_SLUG = "will-croatia-win-june-24"
 SECOND_SLUG = "will-italy-win"
 DRAW_SLUG = "will-the-match-be-a-draw-croatia-italy"
 TEAMS = ["Croatia", "Italy", "Draw"]
-RUNTIME = 3000
+RUNTIME = 30000
 
-host = "https://clob.polymarket.com"
-key = os.getenv("PK")
-polymarket_address = os.getenv("ADDRESS")
-username = os.getenv("BETFAIR_USERNAME")
-password = os.getenv("BETFAIR_PASSWORD")
-chain_id = POLYGON
+HOST = "https://clob.polymarket.com"
+KEY = os.getenv("PK")
+POLYMARKET_ADDRESS = os.getenv("ADDRESS")
+USERNAME = os.getenv("BETFAIR_USERNAME")
+PASSWORD = os.getenv("BETFAIR_PASSWORD")
+CHAIN_ID = POLYGON
 
 betfair_data = BetfairData([])
 
 def start_betfair_thread(match_url, betfair_data, betfair_event):
-    scraper = BetfairScraper(match_url, username, password)
+    scraper = BetfairScraper(match_url, USERNAME, PASSWORD)
     while betfair_event.is_set():
         betfair_data.data = scraper.get_prices_soccer()
         time.sleep(0.5)
@@ -64,7 +64,8 @@ async def main(client, markets, creds, betfair_event, betfair_data):
                     markets, 
                     betfair_data, 
                     stop_event,
-                    TEAMS)
+                    TEAMS,
+                    POLYMARKET_ADDRESS)
 
     subscriber_task = asyncio.create_task(subscriber.run())
     shutdown_task = asyncio.create_task(shutdown_after_delay(RUNTIME, stop_event))
@@ -76,14 +77,14 @@ async def main(client, markets, creds, betfair_event, betfair_data):
     await subscriber_task
 
 if __name__ == "__main__":
-    client = ClobClient(host, key=key, chain_id=chain_id)
+    client = ClobClient(HOST, key=KEY, chain_id=CHAIN_ID)
     creds = client.create_or_derive_api_creds()
     client = ClobClient(
-        host,
-        key=key,
-        chain_id=chain_id,
+        HOST,
+        key=KEY,
+        chain_id=CHAIN_ID,
         creds=creds,
-        funder=polymarket_address,
+        funder=POLYMARKET_ADDRESS,
         signature_type=2
     )
     print("Done!")
