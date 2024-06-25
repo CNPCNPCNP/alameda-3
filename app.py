@@ -19,12 +19,12 @@ from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import AssetType, BalanceAllowanceParams, BookParams, OrderArgs, PartialCreateOrderOptions
 from py_clob_client.order_builder.constants import BUY, SELL
 
-BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.229545435"
-FIRST_SLUG = "will-croatia-win-june-24"
-SECOND_SLUG = "will-italy-win"
-DRAW_SLUG = "will-the-match-be-a-draw-croatia-italy"
-TEAMS = ["Croatia", "Italy", "Draw"]
-RUNTIME = 30000
+BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.229545294"
+FIRST_SLUG = "will-the-netherlands-win-June-25"
+SECOND_SLUG = "will-austria-win-june-25"
+DRAW_SLUG = "will-the-match-be-a-draw-netherlands-austria"
+TEAMS = ["Netherlands", "Austria", "Draw"]
+RUNTIME = 22200
 
 HOST = "https://clob.polymarket.com"
 KEY = os.getenv("PK")
@@ -68,13 +68,18 @@ async def main(client, markets, creds, betfair_event, betfair_data):
                     POLYMARKET_ADDRESS)
 
     subscriber_task = asyncio.create_task(subscriber.run())
+    consumer_task = asyncio.create_task(trader.process_messages())
     shutdown_task = asyncio.create_task(shutdown_after_delay(RUNTIME, stop_event))
     print("Tasks started")
 
     await trader.make_markets(subscription_complete_event)
     betfair_event.clear()
+    print("Exiting all trades!")
+    trader.exit_market()
     
     await subscriber_task
+    await consumer_task
+    await shutdown_task
 
 if __name__ == "__main__":
     client = ClobClient(HOST, key=KEY, chain_id=CHAIN_ID)

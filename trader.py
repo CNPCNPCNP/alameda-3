@@ -10,7 +10,7 @@ from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, PartialCreateOrderOptions
 from py_clob_client.order_builder.constants import BUY, SELL
 
-DEFAULT_WIDTH = 1
+DEFAULT_WIDTH = 0.01
 DEFAULT_SIZE = 5
 EPSILON = 0.01
 MAKER = "MAKER"
@@ -38,25 +38,29 @@ class Trader():
             token_ids = [token["token_id"] for token in market["tokens"]]
             market_detail = MarketDetails(self.teams[index], market_id, token_ids[0], token_ids[1], neg_risk)
             self.market_details.append(market_detail)
+    
+    async def process_messages(self):
+        while not self.stop_event.is_set():
+            try:
+                message = await asyncio.wait_for(self.message_queue.get(), timeout=1.0)
+                self.handle_message(message)
+            except asyncio.TimeoutError:
+                continue
 
     async def make_markets(self, subscription_complete_event):
         await subscription_complete_event.wait()
         while not self.stop_event.is_set():
-            try:
-                message = self.message_queue.get_nowait()
-                if message["type"] == "PLACEMENT":
-                    self.handle_placement_message(message)
-                if message["type"] == "CANCELLATION":
-                    self.handle_cancel_message(message)
-                if message["type"] == "TRADE":
-                    self.handle_trade_message(message)
-                await self.check_current_orders()
-            except asyncio.QueueEmpty:
-                # No message received, do other stuff without blocking
-                await self.check_current_orders()
-                await asyncio.sleep(0.5)
-        print("Exiting all trades!")
-        self.exit_market()
+            # No message received, do other stuff without blocking
+            await self.check_current_orders()
+            await asyncio.sleep(0.5)
+
+    def handle_message(self, message):
+        if message["type"] == "PLACEMENT":
+            self.handle_placement_message(message)
+        if message["type"] == "CANCELLATION":
+            self.handle_cancel_message(message)
+        if message["type"] == "TRADE":
+            self.handle_trade_message(message)
 
     def handle_placement_message(self, message):
         market_id = message["market"]
@@ -68,7 +72,6 @@ class Trader():
                     print(f"Order {order_id} successfully placed in {market_detail.market_name} on YES")
                 if market_detail.no_token == token_id:
                     print(f"Order {order_id} successfully placed in {market_detail.market_name} on NO")
-
 
     def handle_cancel_message(self, message):
         market_id = message["market"]
@@ -153,8 +156,8 @@ class Trader():
                 print("Theoval too skewed, not trading")
                 return
 
-            yes_price = math.floor(100*theoval - DEFAULT_WIDTH) / 100
-            no_price = math.ceil((100*(1-theoval)) - DEFAULT_WIDTH) / 100
+            yes_price = round(theoval, 2) - DEFAULT_WIDTH
+            no_price = yes_price + 2 * DEFAULT_WIDTH
             if market_detail.yes_position >= market_detail.no_position + DEFAULT_SIZE - EPSILON:
                 yes_price -= 0.01
                 no_price += 0.01
