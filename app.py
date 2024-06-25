@@ -24,7 +24,7 @@ FIRST_SLUG = "will-the-netherlands-win-June-25"
 SECOND_SLUG = "will-austria-win-june-25"
 DRAW_SLUG = "will-the-match-be-a-draw-netherlands-austria"
 TEAMS = ["Netherlands", "Austria", "Draw"]
-RUNTIME = 22200
+RUNTIME = 22800
 
 HOST = "https://clob.polymarket.com"
 KEY = os.getenv("PK")

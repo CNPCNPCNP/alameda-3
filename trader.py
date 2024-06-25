@@ -30,6 +30,7 @@ class Trader():
         self.teams = teams
         self.stop_event = stop_event
         self.polymarket_address = polymarket_address
+        self.trades = 0
         
         self.market_details = []
         for index, market in enumerate(markets):
@@ -66,12 +67,13 @@ class Trader():
         market_id = message["market"]
         token_id = message["asset_id"]
         order_id = message["id"]
+        price = message["price"]
         for market_detail in self.market_details:
             if market_detail.market_id == market_id:
                 if market_detail.yes_token == token_id:
-                    print(f"Order {order_id} successfully placed in {market_detail.market_name} on YES")
+                    print(f"Order {order_id} successfully placed in {market_detail.market_name} on YES @ {price}")
                 if market_detail.no_token == token_id:
-                    print(f"Order {order_id} successfully placed in {market_detail.market_name} on NO")
+                    print(f"Order {order_id} successfully placed in {market_detail.market_name} on NO @ {price}")
 
     def handle_cancel_message(self, message):
         market_id = message["market"]
@@ -82,12 +84,14 @@ class Trader():
             if market_detail.market_id == market_id:
                 if market_detail.yes_token == token_id:
                     if order_id in market_detail.yes_sent_orders:
+                        order = market_detail.yes_sent_orders[order_id]
+                        print(f"Order cancelled {order_id} @ {order.price} on {order.side}")
                         del market_detail.yes_sent_orders[order_id]
-                    print(market_detail.yes_sent_orders)
                 if market_detail.no_token == token_id:
                     if order_id in market_detail.no_sent_orders:
+                        order = market_detail.no_sent_orders[order_id]
+                        print(f"Order cancelled {order_id} @ {order.price} on {order.side}")
                         del market_detail.no_sent_orders[order_id]
-                    print(market_detail.no_sent_orders)
 
     def handle_trade_message(self, message):
         market_id = message["market"]
@@ -109,7 +113,9 @@ class Trader():
                                              message["asset_id"], 
                                              filled = float(message["size"]), 
                                              price = float(message["price"]), 
-                                             order_id = message["taker_order_id"])            
+                                             order_id = message["taker_order_id"])
+
+        self.trades += 1            
             
     def handle_trade_message_helper(self, market_id, token_id, filled, price, order_id):
         for market_detail in self.market_details:
@@ -221,7 +227,7 @@ class Trader():
                     f"Should remove bad orders from {side} above {cancellation_price} in market {market.market_name}, theoval {market.theoval}")
                 resp = self.client.cancel(order_id)
                 if resp["not_canceled"]:
-                    print("Order already cancelled")
+                    print(f"Order already cancelled {order_id} @ {order.price} on {order.side}")
                     del orders[order_id]
                     print(orders)
 
@@ -269,3 +275,5 @@ class Trader():
                 print(resp)
         for market_detail in self.market_details:
             print(f"{market_detail.market_name} position: {market_detail.yes_position} - {market_detail.no_position}")
+        
+        print(f"Made {self.trades} trades in session")
