@@ -157,7 +157,7 @@ class Trader():
                 return
 
             yes_price = round(theoval, 2) - DEFAULT_WIDTH
-            no_price = yes_price + 2 * DEFAULT_WIDTH
+            no_price = 1 - (yes_price + 2 * DEFAULT_WIDTH)
             if market_detail.yes_position >= market_detail.no_position + DEFAULT_SIZE - EPSILON:
                 yes_price -= 0.01
                 no_price += 0.01
