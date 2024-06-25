@@ -125,12 +125,12 @@ class Trader():
                 if market_detail.no_token == token_id:
                     order = market_detail.no_sent_orders[order_id]
                     market_detail.no_position += filled
-                    print(f"Traded No @ {price} for {filled} in {market_detail.market_name}. Theoval {market_detail.theoval}")
+                    print(f"Traded No @ {price} for {filled} in {market_detail.market_name}. Theoval {1 - market_detail.theoval}")
                     order.size -= filled
                     if order.size <= EPSILON:
                         print("Order fully filled, removing")
                         del market_detail.no_sent_orders[order_id]
-                print(f"New position: {market_detail.yes_position}, {market_detail.no_position}")
+                print(f"New position in {market_detail.market_name}: {market_detail.yes_position}, {market_detail.no_position}")
 
     def offset_positions(self):
         offset_yes = min([market_detail.yes_position for market_detail in self.market_details])
@@ -210,15 +210,15 @@ class Trader():
         if market.no_position > market.yes_position + DEFAULT_SIZE * 4:
             no_price = 0
         
-        self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price)
-        self.remove_bad_orders_helper(market, market.no_sent_orders, no_price)
+        self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price, YES)
+        self.remove_bad_orders_helper(market, market.no_sent_orders, no_price, NO)
 
-    def remove_bad_orders_helper(self, market, orders, cancellation_price):
+    def remove_bad_orders_helper(self, market, orders, cancellation_price, side):
         for order_id in list(orders.keys()):
             order = orders[order_id]
-            if order.price > cancellation_price + EPSILON:
+            if order.price > cancellation_price + 0.0001:
                 print(
-                    f"Should remove bad orders from YES above {cancellation_price} in market {market.market_name}, theoval {market.theoval}")
+                    f"Should remove bad orders from {side} above {cancellation_price} in market {market.market_name}, theoval {market.theoval}")
                 resp = self.client.cancel(order_id)
                 if resp["not_canceled"]:
                     print("Order already cancelled")
