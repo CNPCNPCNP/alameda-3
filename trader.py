@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_WIDTH = 0.01
-DEFAULT_SIZE = 10
+DEFAULT_SIZE = 5
 EPSILON = 0.01
 MAKER = "MAKER"
 TAKER= "TAKER"
@@ -189,10 +189,14 @@ class Trader():
             token = market_detail.yes_token
             if market_detail.yes_position > market_detail.no_position + DEFAULT_SIZE * 2 - EPSILON and price == market_detail.yes_price:
                 return False
+            if market_detail.yes_position > market_detail.no_position + DEFAULT_SIZE * 4 - EPSILON:
+                return False
         else:
             sent_orders = market_detail.no_sent_orders
             token = market_detail.no_token
             if market_detail.no_position > market_detail.yes_position + DEFAULT_SIZE * 2 - EPSILON and price == market_detail.no_price:
+                return False
+            if market_detail.no_position > market_detail.yes_position + DEFAULT_SIZE * 4 - EPSILON:
                 return False
 
         for order_id in sent_orders:
