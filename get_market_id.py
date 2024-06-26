@@ -1,11 +1,3 @@
-import os
-
-from py_clob_client.constants import POLYGON
-from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import AssetType, BalanceAllowanceParams, BookParams, OrderArgs, PartialCreateOrderOptions
-from py_clob_client.order_builder.constants import BUY, SELL
-
-
 class GetMarketId():
     def __init__(self, client, first_slug, second_slug, third_slug):
         self.client = client
