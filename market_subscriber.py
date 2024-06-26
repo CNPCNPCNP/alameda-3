@@ -2,6 +2,9 @@ import asyncio
 import json
 import websockets
 
+import logging
+logger = logging.getLogger(__name__)
+
 class MarketSubscriber:
     def __init__(self, markets, creds, message_queue, stop_event, subscription_complete_event):
         self.markets = markets
@@ -34,7 +37,7 @@ class MarketSubscriber:
 
     async def subscribe(self, websocket):
         await websocket.send(json.dumps(self.subscribe_message))
-        print(f"Subscribed with message: {self.subscribe_message}")
+        logger.info(f"Subscribed with message: {self.subscribe_message}")
         self.subscription_complete_event.set()
 
     async def listen(self, websocket):
@@ -46,16 +49,16 @@ class MarketSubscriber:
             except asyncio.TimeoutError:
                 continue
             except websockets.ConnectionClosed:
-                print("Connection closed, will retry")
+                logger.info("Connection closed, will retry")
                 await self.handle_reconnect()
                 return
-        print("exiting market subscriber normally")
+        logger.info("exiting market subscriber normally")
         await websocket.close()
 
     async def handle_reconnect(self):
         backoff_time = 1
         while not self.stop_event.is_set():
-            print(f"Attempting to reconnect in {backoff_time} seconds...")
+            logger.info(f"Attempting to reconnect in {backoff_time} seconds...")
             await asyncio.sleep(backoff_time)
             backoff_time = min(backoff_time * 2, 60)  # Exponential backoff with a maximum of 60 seconds
             try:
@@ -64,7 +67,7 @@ class MarketSubscriber:
                     await self.listen(websocket)
                     return
             except Exception as e:
-                print(f"Reconnection failed: {e}")
+                logger.info(f"Reconnection failed: {e}")
 
     async def run(self):
         await self.connect()

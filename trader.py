@@ -1,17 +1,17 @@
 import asyncio
 from functools import partial
-import math
 
 from order import Order
 from market_details import MarketDetails
 
-from py_clob_client.constants import POLYGON
-from py_clob_client.client import ClobClient
 from py_clob_client.clob_types import OrderArgs, PartialCreateOrderOptions
-from py_clob_client.order_builder.constants import BUY, SELL
+from py_clob_client.order_builder.constants import BUY
+
+import logging
+logger = logging.getLogger(__name__)
 
 DEFAULT_WIDTH = 0.01
-DEFAULT_SIZE = 5
+DEFAULT_SIZE = 10
 EPSILON = 0.01
 MAKER = "MAKER"
 TAKER= "TAKER"
@@ -71,26 +71,26 @@ class Trader():
         for market_detail in self.market_details:
             if market_detail.market_id == market_id:
                 if market_detail.yes_token == token_id:
-                    print(f"Order {order_id} successfully placed in {market_detail.market_name} on YES @ {price}")
+                    logger.info(f"Order {order_id} successfully placed in {market_detail.market_name} on YES @ {price}")
                 if market_detail.no_token == token_id:
-                    print(f"Order {order_id} successfully placed in {market_detail.market_name} on NO @ {price}")
+                    logger.info(f"Order {order_id} successfully placed in {market_detail.market_name} on NO @ {price}")
 
     def handle_cancel_message(self, message):
         market_id = message["market"]
         token_id = message["asset_id"]
         order_id = message["id"]
-        print("Handling a cancel message!")
+        logger.info("Handling a cancel message!")
         for market_detail in self.market_details:
             if market_detail.market_id == market_id:
                 if market_detail.yes_token == token_id:
                     if order_id in market_detail.yes_sent_orders:
                         order = market_detail.yes_sent_orders[order_id]
-                        print(f"Order cancelled {order_id} @ {order.price} on {order.side}")
+                        logger.info(f"Order cancelled {order_id} @ {order.price} on {order.side}")
                         del market_detail.yes_sent_orders[order_id]
                 if market_detail.no_token == token_id:
                     if order_id in market_detail.no_sent_orders:
                         order = market_detail.no_sent_orders[order_id]
-                        print(f"Order cancelled {order_id} @ {order.price} on {order.side}")
+                        logger.info(f"Order cancelled {order_id} @ {order.price} on {order.side}")
                         del market_detail.no_sent_orders[order_id]
 
     def handle_trade_message(self, message):
@@ -123,35 +123,35 @@ class Trader():
                 if market_detail.yes_token == token_id:
                     order = market_detail.yes_sent_orders[order_id]
                     market_detail.yes_position += filled
-                    print(f"Traded Yes @ {price} for {filled} in {market_detail.market_name}. Theoval {market_detail.theoval}")
+                    logger.info(f"Traded Yes @ {price} for {filled} in {market_detail.market_name}. Theoval {market_detail.theoval}")
                     order.size -= filled
                     if order.size <= EPSILON:
-                        print("Order fully filled, removing")
+                        logger.info("Order fully filled, removing")
                         del market_detail.yes_sent_orders[order_id]                      
                 if market_detail.no_token == token_id:
                     order = market_detail.no_sent_orders[order_id]
                     market_detail.no_position += filled
-                    print(f"Traded No @ {price} for {filled} in {market_detail.market_name}. Theoval {1 - market_detail.theoval}")
+                    logger.info(f"Traded No @ {price} for {filled} in {market_detail.market_name}. Theoval {1 - market_detail.theoval}")
                     order.size -= filled
                     if order.size <= EPSILON:
-                        print("Order fully filled, removing")
+                        logger.info("Order fully filled, removing")
                         del market_detail.no_sent_orders[order_id]
-                print(f"New position in {market_detail.market_name}: {market_detail.yes_position}, {market_detail.no_position}")
+                logger.info(f"New position in {market_detail.market_name}: {market_detail.yes_position}, {market_detail.no_position}")
 
     def offset_positions(self):
         offset_yes = min([market_detail.yes_position for market_detail in self.market_details])
         offset_no = min([market_detail.no_position for market_detail in self.market_details])
         if offset_yes > 0:
-            print(f"Offsetting {offset_yes} in YES")
+            logger.info(f"Offsetting {offset_yes} in YES")
         if offset_no > 0:
-            print(f"Offsetting {offset_no} in NO")
+            logger.info(f"Offsetting {offset_no} in NO")
         for market_detail in self.market_details:
             market_detail.yes_position -= offset_yes
             market_detail.no_position -= offset_no
     
     async def check_current_orders(self):
         if not self.betfair_data.data:
-            print("Waiting for betfair data")
+            logger.info("Waiting for betfair data")
             return
         
         self.offset_positions()
@@ -159,7 +159,7 @@ class Trader():
             back, lay = self.betfair_data.data[self.teams[index]]
             theoval = theo(back, lay)
             if theoval < 0.04 or theoval > 0.96:
-                print("Theoval too skewed, not trading")
+                logger.info("Theoval too skewed, not trading")
                 return
 
             yes_price = round(theoval, 2) - DEFAULT_WIDTH
@@ -200,7 +200,7 @@ class Trader():
             if order.price == price:
                 return False
         
-        print(f"Buying {side} for {market_detail.market_name}, {market_detail.theoval}, @ {price}")
+        logger.info(f"Buying {side} for {market_detail.market_name}, {market_detail.theoval}, @ {price}")
         await self.send_buy_order(market_detail,
                                     price,
                                     DEFAULT_SIZE,
@@ -223,13 +223,12 @@ class Trader():
         for order_id in list(orders.keys()):
             order = orders[order_id]
             if order.price > cancellation_price + 0.0001:
-                print(
+                logger.info(
                     f"Should remove bad orders from {side} above {cancellation_price} in market {market.market_name}, theoval {market.theoval}")
                 resp = self.client.cancel(order_id)
                 if resp["not_canceled"]:
-                    print(f"Order already cancelled {order_id} @ {order.price} on {order.side}")
+                    logger.info(f"Order already cancelled {order_id} @ {order.price} on {order.side}")
                     del orders[order_id]
-                    print(orders)
 
     async def send_buy_order(self, market, price, size, side, token, neg_risk, theoval):
         resp = await self.create_and_post_order_async(price,
@@ -237,7 +236,9 @@ class Trader():
                                                       BUY,
                                                       token,
                                                       neg_risk)
-        print(resp)
+        success = resp["success"]
+        order_id = resp["orderID"]
+        logger.info(success, order_id)
         
         order = Order(resp["orderID"], 
                         token,
@@ -272,8 +273,8 @@ class Trader():
             token_ids = [token["token_id"] for token in market["tokens"]]
             for id in token_ids:
                 resp = self.client.cancel_market_orders(market=condition_id, asset_id=id)
-                print(resp)
+                logger.info(resp)
         for market_detail in self.market_details:
-            print(f"{market_detail.market_name} position: {market_detail.yes_position} - {market_detail.no_position}")
+            logger.info(f"{market_detail.market_name} position: {market_detail.yes_position} - {market_detail.no_position}")
         
-        print(f"Made {self.trades} trades in session")
+        logger.info(f"Made {self.trades} trades in session")

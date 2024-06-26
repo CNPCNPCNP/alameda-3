@@ -4,6 +4,9 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import ElementClickInterceptedException, NoSuchElementException
 
+import logging
+logger = logging.getLogger(__name__)
+
 class BetfairScraper():
 
     def __init__(self, url: str, username: str, password: str) -> None:
@@ -24,7 +27,7 @@ class BetfairScraper():
                 popup.click_safe()
                 time.sleep(1)
             except NoSuchElementException:
-                print(f'No popup detected for race at {url}, proceeding cautiously')
+                logger.info(f'No popup detected for race at {url}, proceeding cautiously')
                 time.sleep(1)
 
             self.username = self.wd.find_element(By.XPATH, '//*[@id="ssc-liu"]')
@@ -36,11 +39,11 @@ class BetfairScraper():
             login.click_safe()
             time.sleep(5)
         except NoSuchElementException:
-            print("Failed login to betfair, retrying")
+            logger.info("Failed login to betfair, retrying")
             self.wd.refresh()
             self.login(url, username, password)
         except ElementClickInterceptedException:
-            print("Failed login to betfair, retrying")
+            logger.info("Failed login to betfair, retrying")
             self.wd.refresh()
             self.login(url, username, password)
 
