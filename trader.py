@@ -242,7 +242,7 @@ class Trader():
                                                       neg_risk)
         success = resp["success"]
         order_id = resp["orderID"]
-        logger.info(success, order_id)
+        logger.info(f"{success}, {order_id}")
         
         order = Order(resp["orderID"], 
                         token,
@@ -277,7 +277,7 @@ class Trader():
             token_ids = [token["token_id"] for token in market["tokens"]]
             for id in token_ids:
                 resp = self.client.cancel_market_orders(market=condition_id, asset_id=id)
-                logger.info(resp)
+                logger.info(f"{resp}")
         for market_detail in self.market_details:
             logger.info(f"{market_detail.market_name} position: {market_detail.yes_position} - {market_detail.no_position}")
         
