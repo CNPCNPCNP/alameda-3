@@ -15,12 +15,12 @@ from py_clob_client.client import ClobClient
 import logging
 logger = logging.getLogger(__name__)
 
-BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.229546869"
-FIRST_SLUG = "will-ukraine-win"
-SECOND_SLUG = "will-belgium-win-june-26"
-DRAW_SLUG = "will-the-match-be-a-draw-ukraine-belgium"
-TEAMS = ["Ukraine", "Belgium", "Draw"]
-RUNTIME = 49500
+BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.229547010"
+FIRST_SLUG = "will-slovakia-win-june-26"
+SECOND_SLUG = "will-romania-win-june-26"
+DRAW_SLUG = "will-the-match-be-a-draw-slo-rom"
+TEAMS = ["Slovakia", "Romania", "Draw"]
+RUNTIME = 30860
 
 HOST = "https://clob.polymarket.com"
 KEY = os.getenv("PK")
@@ -67,6 +67,7 @@ async def main(client, markets, creds, betfair_event, betfair_data):
     consumer_task = asyncio.create_task(trader.process_messages())
     shutdown_task = asyncio.create_task(shutdown_after_delay(RUNTIME, stop_event))
     logger.info("Tasks started")
+    
     try:
         await trader.make_markets(subscription_complete_event)
     except Exception as e:
@@ -74,8 +75,8 @@ async def main(client, markets, creds, betfair_event, betfair_data):
         stop_event.set()
         shutdown_task.cancel()
     betfair_event.clear()
-    logger.info("Exiting all trades!")
-    trader.exit_market()
+
+    await trader.exit_market()
     
     await subscriber_task
     await consumer_task

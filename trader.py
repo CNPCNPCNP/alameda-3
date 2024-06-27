@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_WIDTH = 0.01
-DEFAULT_SIZE = 5
+DEFAULT_SIZE = 10
 EPSILON = 0.01
 MAKER = "MAKER"
 TAKER= "TAKER"
@@ -175,14 +175,16 @@ class Trader():
             market_detail.yes_price = yes_price
             market_detail.no_price = no_price
 
-            self.remove_bad_orders(market_detail, yes_price, no_price)
-            await self.check_and_send_if_new_order_needed(market_detail, yes_price, YES)
-            await self.check_and_send_if_new_order_needed(market_detail, no_price, NO)
-            await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.01, YES)
-            await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.01, NO)
-            await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.02, YES)
+            await self.remove_bad_orders(market_detail, yes_price, no_price)
+            tasks = [await self.check_and_send_if_new_order_needed(market_detail, yes_price, YES),
+            await self.check_and_send_if_new_order_needed(market_detail, no_price, NO),
+            await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.01, YES),
+            await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.01, NO),
+            await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.02, YES),
             await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.02, NO)
-        
+            ]
+            await asyncio.gather(*tasks)
+
     async def check_and_send_if_new_order_needed(self, market_detail, price, side):
         if side == YES:
             sent_orders = market_detail.yes_sent_orders
@@ -213,23 +215,26 @@ class Trader():
                                     market_detail.neg_risk,
                                     market_detail.theoval)
                 
-    def remove_bad_orders(self, market, yes_price, no_price):
+    async def remove_bad_orders(self, market, yes_price, no_price):
         # Cap our absolute position hopefully
         if market.yes_position > market.no_position + DEFAULT_SIZE * 4:
             yes_price = 0
+            no_price = 1
         if market.no_position > market.yes_position + DEFAULT_SIZE * 4:
             no_price = 0
+            yes_price = 1
         
-        self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price, YES)
-        self.remove_bad_orders_helper(market, market.no_sent_orders, no_price, NO)
+        tasks = [await self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price, YES),
+                 await self.remove_bad_orders_helper(market, market.no_sent_orders, no_price, NO)]
+        await asyncio.gather(*tasks)
 
-    def remove_bad_orders_helper(self, market, orders, cancellation_price, side):
+    async def remove_bad_orders_helper(self, market, orders, cancellation_price, side):
         for order_id in list(orders.keys()):
             order = orders[order_id]
             if order.price > cancellation_price + 0.0001:
                 logger.info(
                     f"Should remove bad orders from {side} above {cancellation_price} in market {market.market_name}, theoval {market.theoval}")
-                resp = self.client.cancel(order_id)
+                resp = await self.async_cancel_order(order_id)
                 if resp["not_canceled"]:
                     logger.info(f"Order already cancelled {order_id} @ {order.price} on {order.side}")
                     del orders[order_id]
@@ -256,29 +261,42 @@ class Trader():
             market.no_sent_orders[resp["orderID"]] = order
 
     async def create_and_post_order_async(self, price, size, side, token_id, neg_risk):
-        loop = asyncio.get_running_loop()
-
         func = partial(
-            self.client.create_and_post_order,
-            OrderArgs(
-                price=price,
-                size=size,
-                side=side,
-                token_id=token_id
-            ),
-            PartialCreateOrderOptions(neg_risk=neg_risk)
+        self.client.create_and_post_order,
+        OrderArgs(
+            price=price,
+            size=size,
+            side=side,
+            token_id=token_id
+        ),
+        PartialCreateOrderOptions(neg_risk=neg_risk)
         )
-        response = await loop.run_in_executor(None, func)
+        response = await asyncio.to_thread(func)
         return response
+    
+    async def async_cancel_order(self, order_id):
+        cancel_partial = partial(self.client.cancel, order_id)
+        return await asyncio.to_thread(cancel_partial)
+    
+    async def async_cancel_market_orders(self, client, market, asset_id):
+        cancel_partial = partial(client.cancel_market_orders, market=market, asset_id=asset_id)
+        return await asyncio.to_thread(cancel_partial)
             
-    def exit_market(self):
+    async def exit_market(self):
+        logger.info(f"Exiting all trades!")
+
+        tasks = []
         for market in self.markets:
             condition_id = market["condition_id"]
             token_ids = [token["token_id"] for token in market["tokens"]]
-            for id in token_ids:
-                resp = self.client.cancel_market_orders(market=condition_id, asset_id=id)
-                logger.info(f"{resp}")
+            for token_id in token_ids:
+                task = asyncio.create_task(self.async_cancel_market_orders(self.client, condition_id, token_id))
+                tasks.append(task)
+        
+        responses = await asyncio.gather(*tasks)
+
+        for resp in responses:
+            logger.info(f"{resp}")
+            
         for market_detail in self.market_details:
             logger.info(f"{market_detail.market_name} position: {market_detail.yes_position} - {market_detail.no_position}")
-        
-        logger.info(f"Made {self.trades} trades in session")
