@@ -15,12 +15,12 @@ from py_clob_client.client import ClobClient
 import logging
 logger = logging.getLogger(__name__)
 
-BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.229547010"
-FIRST_SLUG = "will-slovakia-win-june-26"
-SECOND_SLUG = "will-romania-win-june-26"
-DRAW_SLUG = "will-the-match-be-a-draw-slo-rom"
-TEAMS = ["Slovakia", "Romania", "Draw"]
-RUNTIME = 30860
+BETFAIR_URL = "https://www.betfair.com.au/exchange/plus/football/market/1.230129500"
+FIRST_SLUG = "will-switzerland-win-june-29"
+SECOND_SLUG = "will-italy-win-june-29"
+DRAW_SLUG = "will-the-match-be-a-draw-italy-switzerland"
+TEAMS = ["Switzerland", "Italy", "Draw"]
+RUNTIME = 19700
 
 HOST = "https://clob.polymarket.com"
 KEY = os.getenv("PK")

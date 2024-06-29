@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_WIDTH = 0.01
-DEFAULT_SIZE = 10
+DEFAULT_SIZE = 100
 EPSILON = 0.01
 MAKER = "MAKER"
 TAKER= "TAKER"
@@ -176,12 +176,12 @@ class Trader():
             market_detail.no_price = no_price
 
             await self.remove_bad_orders(market_detail, yes_price, no_price)
-            tasks = [await self.check_and_send_if_new_order_needed(market_detail, yes_price, YES),
-            await self.check_and_send_if_new_order_needed(market_detail, no_price, NO),
-            await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.01, YES),
-            await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.01, NO),
-            await self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.02, YES),
-            await self.check_and_send_if_new_order_needed(market_detail, no_price - 0.02, NO)
+            tasks = [asyncio.create_task(self.check_and_send_if_new_order_needed(market_detail, yes_price, YES)),
+            asyncio.create_task(self.check_and_send_if_new_order_needed(market_detail, no_price, NO)),
+            asyncio.create_task(self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.01, YES)),
+            asyncio.create_task(self.check_and_send_if_new_order_needed(market_detail, no_price - 0.01, NO)),
+            asyncio.create_task(self.check_and_send_if_new_order_needed(market_detail, yes_price - 0.02, YES)),
+            asyncio.create_task(self.check_and_send_if_new_order_needed(market_detail, no_price - 0.02, NO))
             ]
             await asyncio.gather(*tasks)
 
@@ -206,7 +206,7 @@ class Trader():
             if order.price == price:
                 return False
         
-        logger.info(f"Buying {side} for {market_detail.market_name}, {market_detail.theoval}, @ {price}")
+        logger.info(f"Buying {side} for {market_detail.market_name}, {market_detail.theoval}, @ {price}, theoval {market_detail.theoval}")
         await self.send_buy_order(market_detail,
                                     price,
                                     DEFAULT_SIZE,
@@ -224,8 +224,8 @@ class Trader():
             no_price = 0
             yes_price = 1
         
-        tasks = [await self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price, YES),
-                 await self.remove_bad_orders_helper(market, market.no_sent_orders, no_price, NO)]
+        tasks = [asyncio.create_task(self.remove_bad_orders_helper(market, market.yes_sent_orders, yes_price, YES)),
+                 asyncio.create_task(self.remove_bad_orders_helper(market, market.no_sent_orders, no_price, NO))]
         await asyncio.gather(*tasks)
 
     async def remove_bad_orders_helper(self, market, orders, cancellation_price, side):
